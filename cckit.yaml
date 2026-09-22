@@ -10,9 +10,9 @@ version: 0.1.0
 description: 用控制变量法在同一条工作流上横向对比多个 Skill 的表现
 
 # 建议补上这三项 —— cckit 会把它们展示在安装计划里，用户据此判断可信度：
-# author: <你的名字>
-# homepage: https://github.com/<你的账号>/workflow-skill-variant-benchmark
-# license: MIT
+author: 0Ra1n416
+homepage: https://github.com/0Ra1n416/workflow-skill-variant-benchmark
+license: MIT
 
 platforms: [windows, linux, macos]
 
