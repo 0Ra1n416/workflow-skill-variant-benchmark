@@ -129,23 +129,29 @@ cckit disable workflow-skill-variant-benchmark   # 不卸载，只是关掉
 
 **测试组至少要 2 个** —— 只有一个就没得比。
 
-### 3. 两种交互方式
+### 3. 交互方式：默认是 TUI
 
-| | JSON 协议（默认） | 全屏 TUI |
-|---|---|---|
-| 长什么样 | Claude 用问答式菜单问你 | 终端里的箭头键 + 空格多选界面 |
-| 怎么用 | 什么都不用做 | 在你自己的终端里跑 `tui` 子命令 |
-| 限制 | 选项超过 4 个时退化为「打印编号，你回 `1,3`」 | 需要 `questionary` |
-
-**注意：TUI 不能在 Claude Code 内部启动。** Claude Code 的 shell（包括 `!` 前缀的 bash 模式）
-都没有 TTY，全屏界面画不出来。想用 TUI 必须**另开一个终端窗口**，`cd` 到你的项目目录后手动运行：
+信息收集（7 步）**默认由你在新开的终端里用 TUI 完成** —— 箭头键选择、空格多选，一屏看完全部选项。
+Claude 会先帮你校验并初始化，然后把命令给你：
 
 ```bash
-python "<skill 目录>/scripts/run.py" init   # 只有第一次需要
-python "<skill 目录>/scripts/run.py" tui
+cd "<你的项目目录>"                  # 放着 workflow.config.json 的那个
+cckit exec workflow-skill-variant-benchmark scripts/run.py init   # 只有第一次需要
+cckit exec workflow-skill-variant-benchmark scripts/run.py tui
 ```
 
-进度存在 `.wfbm/session.json`，两个终端共享 —— 你在 TUI 里答完，回到 Claude Code 这边它就能接着往下走。
+> 装的是「普通 Skill」而不是 cckit 的话，第二三段换成
+> `python "<skill 目录>/scripts/run.py" init` / `... tui`。Claude 会给你写好的完整命令。
+
+**为什么必须另开终端**：Claude Code 的 shell（包括 `!` 前缀的 bash 模式）**没有 TTY**，
+全屏界面画不出来。这不是本工具的限制，是 CC 的。
+
+进度存在 `.wfbm/session.json`，**两个终端共享** —— 你在 TUI 里答到一半按 `Ctrl+C` 退出，
+回到 Claude Code 这边它能接着走；反过来也一样。答完跟 Claude 说一声，它继续后面的步骤。
+
+**回退**：如果你开不了新终端、或 `questionary` 装不上，直接跟 Claude 说
+「就在对话里问」，它会改用 `AskUserQuestion` 一页页带你走。代价是没有箭头键，
+选项超过 4 个时会退化成「打印编号 → 你回 `1,3`」，而且要点击十几次。
 
 ---
 

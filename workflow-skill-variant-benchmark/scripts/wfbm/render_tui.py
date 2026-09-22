@@ -130,10 +130,14 @@ def run_tui(machine: Machine, on_answer: Callable[[Page, dict], None]) -> None:
     print(_RULE)
     if session.cancelled:
         print("已取消，未生成任何测试文件。")
+        print()
+        print("回到 Claude Code 跟它说一声即可，它不会继续后面的步骤。")
     else:
         print("信息收集完成。")
         print(f"  测试组：{len(session.groups)} 个")
         print(f"  输出根目录：{session.output_root}")
         print()
-        print("接下来由 Claude 运行 `wfbm finalize` 生成 Prompt 并开始测试。")
+        print("→ 回到 Claude Code，跟它说一声「答完了」就行。")
+        print("  不需要转述任何内容 —— 你的全部选择都已存进 .wfbm/session.json，")
+        print("  Claude 会自己读取，然后生成各组 Prompt 并派发 subagent。")
     print(_RULE)
