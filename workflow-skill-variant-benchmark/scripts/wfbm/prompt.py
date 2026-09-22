@@ -17,6 +17,34 @@ def _skill_line(skill: str | None) -> str:
     return "- **使用 Skill**：（不使用任何 Skill，直接执行）"
 
 
+def _discipline_lines(has_reuse: bool) -> list[str]:
+    """执行纪律块。
+
+    实测教训（2026-09-23）：Prompt 里只写「请用 Skill 工具调用 X」而不写失败时该怎么办，
+    三个 subagent 的行为会分裂 —— 两个老实停下并如实报告，一个绕过 Skill、用自己的通用
+    能力硬推，甚至声称要拿**宿主机上的二进制**充当分析对象。所以这里必须写死：
+    失败就停、如实记录、不许替代、不许拿本机文件顶包。
+    """
+    trigger = "某个 Skill 不存在或调用失败（例如工具返回 `Unknown skill`）"
+    if has_reuse:
+        trigger += "，或者第四节里的复用数据来源读不到"
+    return [
+        "**⛔ 执行纪律 —— 这一条优先于下面所有步骤：**",
+        "",
+        f"如果{trigger}，**立即停止**，不要继续往下执行任何步骤：",
+        "",
+        "- 在 RESULT.md 里如实记录：卡在第几步、是哪个 Skill 或哪个路径、报了什么错；",
+        "- 把 result.json 的 `status` 写成 `failed`，并把原因写进 `issues`；",
+        "- **不要用你自己的通用能力替代那个 Skill**，也不要跳过它继续做后面的步骤；",
+        "- **绝不要拿本机上的其他文件、程序或二进制充当分析对象** —— "
+        "分析目标只能是本文档指定的那一个；",
+        "- 已经完成的步骤照实记录，不要为了让流程「跑完」而编造任何产物。",
+        "",
+        "**一份如实记录失败的产物，比一份看起来成功、实则编造的产物有价值得多。**",
+        "",
+    ]
+
+
 def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     """为单个测试组生成最终 Prompt。run_dir 会被写成绝对路径。"""
     wf = machine.wf
@@ -65,6 +93,7 @@ def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     # 执行步骤
     out.append("## 四、执行步骤（严格按顺序）")
     out.append("")
+    out.extend(_discipline_lines(bool(applicable)))
     for step in wf.steps:
         if step.index <= frozen_until:
             out.append(f"### 第 {step.order} 步 · {step.name}  ⛔ 本步骤不执行")
