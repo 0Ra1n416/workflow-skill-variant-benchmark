@@ -27,7 +27,7 @@ RAW = [
 
 def build(tmp_path: Path, *, freeze_until: str | None = None) -> tuple[Machine, Session, Path, object]:
     cfg = parse_config(RAW, "workflow.config.json")
-    m = Machine(cfg, Session(config_path="workflow.config.json"))
+    m = Machine(cfg, Session(config_path="workflow.config.json", cwd=str(tmp_path)))
     m.apply({"workflow": "W"})
     m.apply({"variables": ["Step 1", "Merge"]})
     m.apply({"skill": "b1"})
@@ -106,9 +106,29 @@ def test_frozen_prefix_replaces_steps(tmp_path):
     # 被冻结的步骤不该再出现 Skill 指派
     assert "Skill 工具调用 `a2`" not in g2
     assert "Skill 工具调用 `m2`" not in g2
+    # 第 4 条要求必须为「复用数据来源」开豁免，否则和冻结前缀自相矛盾
+    assert "复用数据来源」（那是上游步骤的既有产出" in g2
+    assert "不要读取本目录之外的产物目录。" not in g2
 
     assert manifest["groups"][1]["frozen_until"] == 1
     assert manifest["groups"][0]["frozen_until"] == -1
+
+
+def test_no_contradiction_exemption_without_reuse(tmp_path):
+    m, session, sdir, cfg = build(tmp_path)
+    out_dir, _ = out.finalize(cfg, session, sdir, tmp_path)
+    text = (out_dir / "prompts" / "group-1.md").read_text(encoding="utf-8")
+    assert "不要读取本目录之外的产物目录。" in text
+    assert "复用数据来源」" not in text
+
+
+def test_windows_path_separators_are_consistent(tmp_path):
+    m, session, sdir, cfg = build(tmp_path)
+    out_dir, _ = out.finalize(cfg, session, sdir, tmp_path)
+    text = (out_dir / "prompts" / "group-1.md").read_text(encoding="utf-8")
+    # 不允许出现 `...\runs\group-1/RESULT.md` 这种混用
+    assert "/RESULT.md" not in text
+    assert "/result.json" not in text
 
 
 def test_finalize_creates_expected_tree(tmp_path):
@@ -185,3 +205,63 @@ def test_report_before_finalize_is_usage_error(tmp_path):
 
     with pytest.raises(UsageError):
         out.report(sdir)
+
+
+def _extract_json_block(text: str) -> dict:
+    """把 Prompt 里给 subagent 抄的 result.json 骨架抠出来。"""
+    lines = text.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.strip().startswith("```json"))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "```")
+    return json.loads("\n".join(lines[start + 1 : end]))
+
+
+def test_result_json_skeleton_is_valid_json(tmp_path):
+    m, session, sdir, cfg = build(tmp_path, freeze_until="Merge")
+    out_dir, _ = out.finalize(cfg, session, sdir, tmp_path)
+    for group_id in ("group-1", "group-2"):
+        text = (out_dir / "prompts" / f"{group_id}.md").read_text(encoding="utf-8")
+        payload = _extract_json_block(text)
+        assert payload["group_id"] == group_id
+        assert payload["status"] == "done"
+        assert isinstance(payload["skill_assignments"], dict)
+        assert set(payload["steps"][0]) == {"step", "status", "outputs", "notes"}
+
+
+def test_result_json_skeleton_handles_single_assignment(tmp_path):
+    """只有一个会执行的步骤时不能多出尾逗号。"""
+    cfg = parse_config(RAW, "workflow.config.json")
+    m = Machine(cfg, Session(config_path="workflow.config.json", cwd=str(tmp_path)))
+    m.apply({"workflow": "W"})
+    m.apply({"variables": ["Step 1"]})
+    m.apply({"skill": "m1"})  # 不变量 Merge
+    m.apply({"skill": "b1"})  # 不变量 Step 2（Single 唯一选项自动选，Tail 无 skill）
+    m.apply({"action": "add"})
+    m.apply({"skill": "a1"})
+    m.apply({"action": "add"})
+    m.apply({"skill": "a2"})
+    m.apply({"action": "next"})
+    m.apply({"test_prompt": "任务"})
+    m.apply({"action": "next"})
+    m.apply({"output_root": "wfbm-runs", "confirmed": "确认并开始"})
+    sdir = tmp_path / ".wfbm"
+    sdir.mkdir(parents=True, exist_ok=True)
+    out_dir, _ = out.finalize(cfg, m.session, sdir, tmp_path)
+    text = (out_dir / "prompts" / "group-1.md").read_text(encoding="utf-8")
+    assert _extract_json_block(text)["group_id"] == "group-1"
+
+
+def test_output_root_resolves_against_init_cwd(tmp_path):
+    """用户在 A 目录 init、Agent 从 B 目录 finalize，产物必须落在 A。"""
+    init_dir = tmp_path / "user-project"
+    init_dir.mkdir()
+    m, session, sdir, cfg = build(init_dir)
+    sdir = init_dir / ".wfbm"
+    sdir.mkdir(parents=True, exist_ok=True)
+
+    elsewhere = tmp_path / "somewhere-else"
+    elsewhere.mkdir()
+    out_dir, manifest = out.finalize(cfg, session, sdir, elsewhere)
+
+    assert out_dir.parent == init_dir / "wfbm-runs"
+    assert manifest["cwd"] == str(init_dir.resolve())
+    assert not (elsewhere / "wfbm-runs").exists()

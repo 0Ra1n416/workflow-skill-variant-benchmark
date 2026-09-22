@@ -73,10 +73,12 @@ def finalize(config: LoadedConfig, session: Session, sdir: Path, cwd: Path) -> t
         raise UsageError("测试提示词为空，无法生成 Prompt")
 
     machine = Machine(config, session)
+    # 相对路径一律相对「用户 init 时的工作目录」解析，而不是 finalize 时的 cwd。
+    base_cwd = Path(session.cwd) if session.cwd else cwd
     root_raw = session.output_root or DEFAULT_OUTPUT_ROOT
     root = Path(root_raw).expanduser()
     if not root.is_absolute():
-        root = cwd / root
+        root = base_cwd / root
 
     out_dir = _unique_dir(root, datetime.now().strftime("%Y%m%d-%H%M%S"))
     out_dir.mkdir(parents=True, exist_ok=False)
@@ -87,7 +89,7 @@ def finalize(config: LoadedConfig, session: Session, sdir: Path, cwd: Path) -> t
     _write_json(out_dir / SESSION_FILENAME, session.to_dict())
     _write_json(out_dir / CONFIG_SNAPSHOT_FILENAME, config.raw)
 
-    manifest = _build_manifest(config, session, machine, cwd, out_dir)
+    manifest = _build_manifest(config, session, machine, base_cwd, out_dir)
 
     for group in session.groups:
         run_dir = out_dir / "runs" / group.id

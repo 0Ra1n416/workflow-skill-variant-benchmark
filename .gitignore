@@ -12,3 +12,9 @@ build/
 # wfbm 运行时产物
 .wfbm/
 wfbm-runs/
+
+# 真实json
+workflow.config.json
+
+# 开发文档
+TODO.md

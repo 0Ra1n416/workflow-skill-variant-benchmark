@@ -147,7 +147,7 @@ def cmd_init(args) -> int:
         print(raise_msg, file=sys.stderr)
         return 1
 
-    session = Session(config_path=str(path.resolve()))
+    session = Session(config_path=str(path.resolve()), cwd=str(cwd.resolve()))
     sdir.mkdir(parents=True, exist_ok=True)
     out.save_session(sdir, session)
     out._write_json(sdir / out.CONFIG_SNAPSHOT_FILENAME, cfg.raw)

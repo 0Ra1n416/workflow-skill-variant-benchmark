@@ -162,6 +162,9 @@ class Session:
 
     version: int = SESSION_VERSION
     config_path: str = ""
+    #: init 时的工作目录。output_root 等相对路径一律相对它解析 ——
+    #: 否则「用户在 A 目录 init、Agent 从 B 目录 finalize」会把产物写错地方。
+    cwd: str = ""
     workflow: str | None = None
     variables: list[str] = field(default_factory=list)
     invariants: dict[str, str] = field(default_factory=dict)
@@ -182,6 +185,7 @@ class Session:
         return {
             "version": self.version,
             "config_path": self.config_path,
+            "cwd": self.cwd,
             "workflow": self.workflow,
             "variables": list(self.variables),
             "invariants": dict(self.invariants),
@@ -201,6 +205,7 @@ class Session:
         return cls(
             version=data.get("version", SESSION_VERSION),
             config_path=data.get("config_path", ""),
+            cwd=data.get("cwd", ""),
             workflow=data.get("workflow"),
             variables=list(data.get("variables", [])),
             invariants=dict(data.get("invariants", {})),

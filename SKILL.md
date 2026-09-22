@@ -37,7 +37,7 @@ uv run --project "$SKILL" wfbm <子命令>
 
 | 子命令 | 用途 |
 |---|---|
-| `wfbm tui` | 全屏交互界面。**只能由用户在 Claude Code 的对话框里用 `!` 前缀运行**——Agent 的工具 shell 不是 TTY，跑不了 |
+| `wfbm tui` | 全屏交互界面。**CC 里跑不了**（`!` 也没有 TTY，已实测）；只在用户另开真实终端时可用。见下 |
 | `wfbm check --json` | 校验配置并列出可选 workflow |
 | `wfbm init --json` | 初始化暂存区 `.wfbm/` |
 | `wfbm next` | 取当前页面（JSON） |
@@ -64,28 +64,43 @@ uv run --project "$SKILL" wfbm <子命令>
    - 若返回 `error: session_exists`，问用户是**继续上次的进度**（直接跳到步骤 1 的循环）
      还是**重来**（`wfbm init --force --json`）。
 
-### 备选：让用户自己跑 TUI（箭头键 / 空格多选的完整界面）
+### 交互方式：两条路，二选一
 
-**必须让用户在 Claude Code 的对话框里执行**，而且要跟他讲清楚怎么做——这个功能不显眼，
-用户很可能不知道输入框可以直接跑命令。不要让他另开一个终端窗口，也不要试图用你自己的工具去跑
-（你的工具 shell 不是 TTY，会直接报错退出）。
+**前提（已实测 2026-09-22）：Claude Code 里没有 TTY。** Agent 的工具 shell 和用户的
+`!` bash 模式都没有 —— `wfbm tui` 在 CC 内必然报 `当前 stdin/stdout 不是终端` 后退出。
+所以全屏 TUI 只能在 CC 之外跑。给用户讲清楚这两条路，**命令要写全，路径要替换成真实的**。
 
-对用户这样说（措辞照抄）：
+#### 路线 A（推荐，有箭头键 / 空格多选的界面）：新开一个终端
 
-> 请在 **Claude Code 的输入框里**（先清空，然后以感叹号开头）把下面这一整行**原样发出来**：
+这样对用户说：
+
+> 想要箭头键的完整界面的话，请**新开一个终端窗口**（Windows Terminal / PowerShell / SSH 都行），
+> 依次执行：
 >
 > ```text
-> ! uv run --project "<SKILL>" wfbm tui
+> cd "<放着 workflow.config.json 的那个项目目录>"
+> uv run --project "<skill 的绝对路径>" wfbm init
+> uv run --project "<skill 的绝对路径>" wfbm tui
 > ```
 >
-> 开头的 `!` 是 Claude Code 的 **bash 模式**：这一行不会发给我，而是直接在你自己的终端里
-> 当命令执行，执行结果会回到我们的对话里。全屏交互界面需要真实终端，只有这样才能跑起来。
+> 两点注意：
+> - `cd` 到的是**你自己的项目目录**（有 `workflow.config.json` 的那个），不是 skill 目录；
+>   skill 目录只出现在 `--project` 里。
+> - `wfbm init` 只有**第一次**需要跑；之后直接从 `wfbm tui` 开始，进度会续上。
 >
-> - **跑完**（选完所有选项，程序自己结束）会**自动**回到对话，不用按键，然后告诉我一声。
-> - **还没执行就想反悔**：把输入框清空，按 `Esc`、`Backspace` 或 `Ctrl+U` 退出 bash 模式。
-> - **中途想中断**：按一次 `Ctrl+C`，进度会自动保存，下次接着来。
+> 答完回到这边跟我说一声就行。
 
-用户跑完后，运行 `wfbm status --json` 确认相位；若已是 `confirm`/`done`，直接跳到步骤 8。
+进度存在 `.wfbm/session.json`，两个终端共享，所以用户在 TUI 里答完，你这边
+`wfbm status --json` 就能接着往下走（若已是 `done`，直接跳到步骤 8）。
+
+> 提醒：TUI 那条代码路径**从未在真实 TTY 里跑过**（只做过静态检查），第一次用可能需要调试。
+> 所以别把它当成默认推荐 —— 用户主动想要图形化界面时才提。
+
+#### 路线 B（CC 内，默认）：JSON 协议前端
+
+不切窗口，由你用 `wfbm next` / `wfbm submit` + `AskUserQuestion` 一问一答地驱动。
+没有箭头键，选项超过 4 个时退化成编号列表（见上文 `render=numbered`）。
+**用户没有特别要求时，一律走这条。**
 
 ---
 
@@ -178,7 +193,7 @@ uv run --project "$SKILL" wfbm report
 
 | 现象 | 处理 |
 |---|---|
-| `wfbm: 当前 stdin/stdout 不是终端` | TUI 需要真实终端。改用 JSON 协议（`next`/`submit`），或告诉用户在 **Claude Code 的对话框**里用 `!` 前缀运行 `wfbm tui`。**绝不要**自己反复重试 TUI——重试一百次也还是同一个结果 |
+| `wfbm: 当前 stdin/stdout 不是终端` | 预期之中的结果——TUI 需要真实 TTY，CC 的 `!` bash 模式和你的工具 shell 都没有。**改用 JSON 协议（`next`/`submit`）**，这是 CC 里的唯一路径。绝不要重试 TUI |
 | `找不到流程状态文件` | 还没 `init`，或 `--session-dir` 指错了 |
 | `流程还没有 finalize` | `report`/`mark` 之前必须先 `finalize` |
 | `流程已经结束，没有待回答的问题` | 1–7 步已走完。直接进入步骤 8 |

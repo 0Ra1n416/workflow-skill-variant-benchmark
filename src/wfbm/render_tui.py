@@ -98,7 +98,10 @@ def run_tui(machine: Machine, on_answer: Callable[[Page, dict], None]) -> None:
     if not tui_available():
         print(
             "wfbm: 当前 stdin/stdout 不是终端，无法启动交互界面。\n"
-            "  请在真实终端中运行；在 Claude Code 里请用 `!` 前缀运行本命令。",
+            "  全屏交互需要真实 TTY。注意：Claude Code 里跑不了 —— Agent 的工具 shell\n"
+            "  和 `!` bash 模式都没有 TTY（均已实测）。\n"
+            "  · 在 Claude Code 里：请改用 JSON 协议前端（wfbm next / wfbm submit）。\n"
+            "  · 想用这个界面：另开一个真实终端窗口，cd 到项目目录后直接运行本命令。",
             file=sys.stderr,
         )
         raise SystemExit(2)

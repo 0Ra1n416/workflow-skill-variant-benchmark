@@ -21,6 +21,9 @@ def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     """为单个测试组生成最终 Prompt。run_dir 会被写成绝对路径。"""
     wf = machine.wf
     run_dir_abs = str(run_dir.resolve())
+    # 用 Path 拼接再转字符串，避免 Windows 上出现 `...\runs\group-1/RESULT.md` 这种混用分隔符
+    result_md_abs = str(run_dir.resolve() / "RESULT.md")
+    result_json_abs = str(run_dir.resolve() / "result.json")
     frozen_until = machine.frozen_until_index(group.id)
     applicable = machine.attachments_for(group.id)
     invariants = machine.resolved_invariants()
@@ -90,11 +93,11 @@ def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     out.append("## 五、附加要求")
     out.append("")
     out.append(f"1. 所有产物必须写入 `{run_dir_abs}` 目录内（可以在里面建子目录），不要写到该目录之外。")
-    out.append(f"2. 在 `{run_dir_abs}/RESULT.md` 写一份叙述性报告，至少包含：")
+    out.append(f"2. 在 `{result_md_abs}` 写一份叙述性报告，至少包含：")
     out.append("   - 每一步实际做了什么、产出了哪些文件")
     out.append("   - 遇到的困难、偏离，以及你是如何处理的")
     out.append("   - 一句话结论：这条流水线跑得怎么样")
-    out.append(f"3. 在 `{run_dir_abs}/result.json` 写一份结构化结果，字段固定如下：")
+    out.append(f"3. 在 `{result_json_abs}` 写一份结构化结果，字段固定如下：")
     out.append("")
     out.append("   ```json")
     out.append("   {")
@@ -103,8 +106,10 @@ def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     out.append('     "started_at": "<ISO8601>",')
     out.append('     "finished_at": "<ISO8601>",')
     out.append('     "skill_assignments": {')
-    for name, skill in _assignment_rows(machine, group):
-        out.append(f'       "{name}": "{skill}",')
+    rows = _assignment_rows(machine, group)
+    for i, (name, skill) in enumerate(rows):
+        comma = "," if i < len(rows) - 1 else ""
+        out.append(f'       "{name}": "{skill}"{comma}')
     out.append("     },")
     out.append('     "steps": [')
     out.append('       {"step": "<步骤名>", "status": "done", "outputs": ["<相对路径>"], "notes": ""}')
@@ -116,7 +121,16 @@ def build_prompt(machine: Machine, group: Group, run_dir: Path) -> str:
     out.append("   ```")
     out.append("")
     out.append("   `status` 取值：`done` | `partial` | `failed`。上面的字段名必须完全一致。")
-    out.append("4. **只做上述工作。** 不要与其他测试组通信，不要读取本目录之外的产物目录。")
+    if applicable:
+        # 冻结前缀让 subagent 去读 run_dir 之外的数据；不写清楚的话，
+        # 下面第 4 条「不要读取本目录之外」会和它直接冲突，较真的执行者会拒绝读。
+        out.append(
+            "4. **只做上述工作。** 不要与其他测试组通信。除第四节中明确列出的"
+            "「复用数据来源」（那是上游步骤的既有产出，读取它是本组的预期行为）之外，"
+            "不要读取本目录之外的任何产物目录。"
+        )
+    else:
+        out.append("4. **只做上述工作。** 不要与其他测试组通信，不要读取本目录之外的产物目录。")
     out.append("")
     return "\n".join(out)
 
