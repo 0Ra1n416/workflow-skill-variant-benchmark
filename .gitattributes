@@ -1,0 +1,3 @@
+# kit 会在 Linux / macOS 上被 clone 和检查，CRLF 会让 .sh 报 bad interpreter，
+# 也会让 cckit 的 CRLFLint 报 warn。统一按 LF 检出。
+* text=auto eol=lf

@@ -1,0 +1,8 @@
+# 运行时依赖。cckit 按 cckit.yaml 的 requires.python.file 读本文件建 venv。
+#
+# 注意：本文件是「运行时的唯一真相源」，但根目录 pyproject.toml 的 dev 依赖组里
+# 也有 questionary（方便本地跑 TUI）。**改依赖时两处都要动。**
+#
+# questionary 只被 TUI 前端用到（render_tui.py 里是懒加载），
+# JSON 协议前端与其余全部功能都只用标准库。
+questionary>=2.0

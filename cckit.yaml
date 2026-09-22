@@ -1,0 +1,28 @@
+# cckit manifest。字段规范见 CCKitKit 仓库的 Docs/schema/cckit.schema.json。
+#
+# 注意：kit-builder skill 自带的 manifest-spec.md 里把顶层环境变量字段写成了 `env`，
+# 但 cckit 0.3.2 的实际 schema 是 `kit_env`。以 schema 为准。
+
+cckit: 1
+
+kit: workflow-skill-variant-benchmark
+version: 0.1.0
+description: 用控制变量法在同一条工作流上横向对比多个 Skill 的表现
+
+# 建议补上这三项 —— cckit 会把它们展示在安装计划里，用户据此判断可信度：
+# author: <你的名字>
+# homepage: https://github.com/<你的账号>/workflow-skill-variant-benchmark
+# license: MIT
+
+platforms: [windows, linux, macos]
+
+requires:
+  runtime:
+    python: ">=3.11"
+  python:
+    file: requirements.txt
+
+skills:
+  - name: workflow-skill-variant-benchmark
+    needs: [python]
+    scripts: [scripts/run.py]

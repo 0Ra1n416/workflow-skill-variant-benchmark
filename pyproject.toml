@@ -1,19 +1,28 @@
-[project]
-name = "workflow-skill-variant-benchmark"
-version = "0.1.0"
-description = "Control-variable benchmark harness: compare Skills within a fixed workflow."
-requires-python = ">=3.13"
-dependencies = ["questionary>=2.0"]
+# 本文件**只服务于本地开发与测试**。
+#
+# 运行时依赖以根目录的 requirements.txt 为准 —— cckit 读的是那一份（见 cckit.yaml
+# 的 requires.python.file）。这里的 dev 组只是为了让你能在本机跑 `uv run pytest`
+# 和 `uv run python`。
+#
+# 包本体在 workflow-skill-variant-benchmark/scripts/wfbm/，不走安装式布局；
+# tests/conftest.py 会把它挂上 sys.path。
 
-[project.scripts]
-wfbm = "wfbm.cli:main"
+[project]
+name = "workflow-skill-variant-benchmark-dev"
+version = "0.1.0"
+description = "Dev-only environment for the workflow-skill-variant-benchmark kit."
+requires-python = ">=3.11"
+dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    # 与根目录 requirements.txt 重复，改依赖时两处都要动（本地跑 TUI 需要它）
+    "questionary>=2.0",
+]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv]
+package = false
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/wfbm"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]

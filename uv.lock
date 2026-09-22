@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 
 [[package]]
 name = "colorama"
@@ -97,20 +97,20 @@ wheels = [
 ]
 
 [[package]]
-name = "workflow-skill-variant-benchmark"
+name = "workflow-skill-variant-benchmark-dev"
 version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "questionary" },
-]
+source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "questionary" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "questionary", specifier = ">=2.0" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0" }]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "questionary", specifier = ">=2.0" },
+]

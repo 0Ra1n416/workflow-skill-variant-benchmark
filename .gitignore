@@ -18,3 +18,6 @@ workflow.config.json
 
 # 开发文档
 TODO.md
+
+# pytest
+tests/
