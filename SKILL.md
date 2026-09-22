@@ -1,0 +1,194 @@
+---
+name: workflow-skill-variant-benchmark
+description: 读取 workflow.config.json，用控制变量法在同一条工作流上对比多个 Skill 的表现。把某些步骤设为变量（每组换用不同 Skill）、其余步骤设为不变量（固定 Skill），为每个测试组生成一份独立 Prompt 并派发 subagent 执行，最后汇报各组结果文件夹。当用户想做 skill 横向评测、A/B 对比、消融实验、控制变量测试，或提到 workflow.config.json 时使用。
+---
+
+# workflow-skill-variant-benchmark
+
+在同一条工作流上，用**控制变量法**比较不同 Skill 的表现。
+
+- **变量步骤**：每个测试组换用不同的 Skill。
+- **不变量步骤**：整个测试固定使用同一个 Skill。
+- **可复用产物**：可以让某个测试组直接复用指定步骤及其之前步骤的既有数据，不重新执行，
+  这样下游的对比就建立在完全相同的输入上。
+
+## 核心约束：你（Agent）只是搬运工
+
+**1–7 步的全部判断都在 Python 状态机里**——页面顺序、选项枚举、分页、校验、汇总、
+Prompt 拼装。你不知道下一步该问什么，是状态机告诉你的；你也不知道答案合不合法，
+校验在 `wfbm submit` 里做。
+
+因此：
+
+- ✅ 把 `wfbm` 返回的 `page.intro` / `page.body` **逐字**转达给用户。
+- ✅ 严格按每个问题的 `render` 字段决定怎么提问。
+- ✅ 把用户输入**原样**回填给 `wfbm submit`（解析由 wfbm 负责）。
+- ❌ 不要自己推断、总结、改写或跳过任何一页。
+- ❌ 不要替用户编造答案；校验失败就按错误信息重新提问。
+- ❌ 不要自行修改 `workflow.config.json`、`.wfbm/` 或产出区里的任何文件。
+
+## 命令
+
+设 `$SKILL` 为本 SKILL.md 所在目录。所有命令都用：
+
+```bash
+uv run --project "$SKILL" wfbm <子命令>
+```
+
+| 子命令 | 用途 |
+|---|---|
+| `wfbm tui` | 全屏交互界面。**只能由用户在 Claude Code 的对话框里用 `!` 前缀运行**——Agent 的工具 shell 不是 TTY，跑不了 |
+| `wfbm check --json` | 校验配置并列出可选 workflow |
+| `wfbm init --json` | 初始化暂存区 `.wfbm/` |
+| `wfbm next` | 取当前页面（JSON） |
+| `wfbm submit --answers-file <路径>` | 回填答案，返回下一页或 `done` |
+| `wfbm status --json` | 查看进度 |
+| `wfbm finalize` | 生成产出区、manifest 与各组 Prompt |
+| `wfbm mark --group <id> --status <s>` | 更新某个测试组的进度标识 |
+| `wfbm report` | 汇总各组结果，生成 `SUMMARY.md` |
+
+---
+
+## 步骤 0 · 准备
+
+1. 在工作目录下查找 `workflow.config.json`。
+2. 运行 `wfbm check --json`。
+   - **失败**：把 `message` 字段**原样**转达给用户（形如
+     `workflow.config.json 格式不合法：<JSON 路径> <说明>`），然后问用户想怎么处理。
+     **绝对不要自己动手改配置文件。**
+   - 文件不存在：问用户是否有该文件的路径。
+     - 用户取消 → 结束，什么都不做。
+     - 用户给了路径 → `wfbm check --config <路径> --json`，同上处理。
+   - 有 `warnings`：一并转达给用户（例如某步骤的 description 与 instruction 同时为空）。
+3. 校验通过后运行 `wfbm init --json`。
+   - 若返回 `error: session_exists`，问用户是**继续上次的进度**（直接跳到步骤 1 的循环）
+     还是**重来**（`wfbm init --force --json`）。
+
+### 备选：让用户自己跑 TUI（箭头键 / 空格多选的完整界面）
+
+**必须让用户在 Claude Code 的对话框里执行**，而且要跟他讲清楚怎么做——这个功能不显眼，
+用户很可能不知道输入框可以直接跑命令。不要让他另开一个终端窗口，也不要试图用你自己的工具去跑
+（你的工具 shell 不是 TTY，会直接报错退出）。
+
+对用户这样说（措辞照抄）：
+
+> 请在 **Claude Code 的输入框里**（先清空，然后以感叹号开头）把下面这一整行**原样发出来**：
+>
+> ```text
+> ! uv run --project "<SKILL>" wfbm tui
+> ```
+>
+> 开头的 `!` 是 Claude Code 的 **bash 模式**：这一行不会发给我，而是直接在你自己的终端里
+> 当命令执行，执行结果会回到我们的对话里。全屏交互界面需要真实终端，只有这样才能跑起来。
+>
+> - **跑完**（选完所有选项，程序自己结束）会**自动**回到对话，不用按键，然后告诉我一声。
+> - **还没执行就想反悔**：把输入框清空，按 `Esc`、`Backspace` 或 `Ctrl+U` 退出 bash 模式。
+> - **中途想中断**：按一次 `Ctrl+C`，进度会自动保存，下次接着来。
+
+用户跑完后，运行 `wfbm status --json` 确认相位；若已是 `confirm`/`done`，直接跳到步骤 8。
+
+---
+
+## 步骤 1–7 · 驱动状态机
+
+循环执行：
+
+```
+page = wfbm next
+  ↓  按 page.agent_instructions 和每个问题的 render 字段向用户提问
+answers = 用户的选择
+  ↓
+wfbm submit --answers-file <把 answers 写成的 JSON 文件>
+  ↓  返回下一页，或 {"kind":"done"}，或 {"kind":"error"}
+```
+
+**`render` 字段的含义（必须照做）：**
+
+| render | 怎么做 |
+|---|---|
+| `direct` | 用 `AskUserQuestion` 提问；`kind=multi_select` 时设 `multiSelect=true` |
+| `numbered` | 选项超过 4 个，`AskUserQuestion` 装不下。先在对话里按 `1. label（hint）` 打印编号列表，再让用户填编号。用户答 `1,3` 或 `all` 都行，**原样**提交 |
+| `ask_in_chat` | 自由文本（测试提示词、文件路径等）。**直接在对话里向用户索取**，不要用 `AskUserQuestion` |
+| `display` | 只展示，不需要输入 |
+
+**提交答案**：把答案写成 JSON 文件再用 `--answers-file`，比 `--answers` 免去引号转义之苦。
+键就是问题的 `id`：
+
+```json
+{ "workflow": "Example Workflow" }
+{ "variables": ["Step 1", "Merge"] }
+{ "action": "add" }
+{ "action": "undo" }
+{ "action": "next" }
+{ "skill": "example-skill-1" }
+{ "test_prompt": "请对目标样本完成整条流水线的处理……" }
+```
+
+测试组列表页的 `action` 有三个可能值：`add`（添加）/ `undo`（撤销最后一个测试组）/
+`next`（下一步）。**以 `wfbm` 返回的 options 为准**——`undo` 只在已有测试组时才出现。
+用户说"删掉最后一组""加错了"时就提交 `undo`。
+
+**出错时**：`kind=error` 会带 `message` 和 `issues`，以及**同一个 page**。
+把 `message` 原样转达用户，然后按那一页重新提问。不要自己猜一个合法值填进去。
+
+几个必须原样转达的提示：
+
+- 测试组不足 2 个时点下一步 → `测试组数量需要大于等于 2（当前 N 组）`
+- 第 5 步要提醒用户：**不要**把「第几步用哪个 Skill」写进测试提示词，那部分由工具自动拼接。
+
+---
+
+## 步骤 8 · 生成测试文件
+
+```bash
+uv run --project "$SKILL" wfbm finalize
+```
+
+返回产出区路径、每组 Prompt 的绝对路径、每组的运行目录。
+
+---
+
+## 步骤 9 · 派发 subagent
+
+**为每一个测试组起一个独立 subagent**（在一条消息里并发起，互不污染）：
+
+- `prompt` = 该组 `prompts/<group-id>.md` 的**全文**，逐字传入，不要摘要、不要改写。
+- 起之前：`wfbm mark --group <id> --status running`
+- 返回后：`wfbm mark --group <id> --status done`（失败则 `--status failed --notes "<原因>"`）
+
+不要在你自己（主 Agent）的上下文里执行 Prompt 的内容——那会让后跑的组看到前面组的结果。
+
+---
+
+## 步骤 Last · 汇报
+
+```bash
+uv run --project "$SKILL" wfbm report
+```
+
+把返回的 `summary`（即 `SUMMARY.md` 的内容）**原样**转达给用户，尤其是
+「结果文件夹」一节里的**绝对路径**——用户要靠它去翻各组的 `RESULT.md` 和产物。
+
+本工具只做控制变量式的执行与留档，**不做自动评分与对比分析**。不要自行给各组打分或
+下"哪个 Skill 更好"的结论；差异归因交给用户读各组的 `RESULT.md`。
+
+---
+
+## 故障处理
+
+| 现象 | 处理 |
+|---|---|
+| `wfbm: 当前 stdin/stdout 不是终端` | TUI 需要真实终端。改用 JSON 协议（`next`/`submit`），或告诉用户在 **Claude Code 的对话框**里用 `!` 前缀运行 `wfbm tui`。**绝不要**自己反复重试 TUI——重试一百次也还是同一个结果 |
+| `找不到流程状态文件` | 还没 `init`，或 `--session-dir` 指错了 |
+| `流程还没有 finalize` | `report`/`mark` 之前必须先 `finalize` |
+| `流程已经结束，没有待回答的问题` | 1–7 步已走完。直接进入步骤 8 |
+| `已存在未完成的流程` | 问用户是继续还是 `--force` 重来 |
+
+## 目录约定
+
+| 路径 | 内容 |
+|---|---|
+| `<cwd>/.wfbm/` | 暂存区：`session.json`（状态机全量状态）、`answers.jsonl`（问答审计日志） |
+| `<output_root>/<时间戳>/` | 最终产出区：`manifest.json`（进度标识的唯一真相）、`prompts/`、`runs/<group-id>/`、`SUMMARY.md` |
+
+`output_root` 由用户在第 7 步填写，默认 `wfbm-runs`。两个目录都已加进 `.gitignore`。

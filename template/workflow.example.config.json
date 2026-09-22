@@ -1,0 +1,81 @@
+[
+    {
+        "name": "Example Workflow",
+        "description": "An example workflow for demonstration purposes.",
+        "steps": [
+            {
+                "name": "Step 1",
+                "description": "This is the first step of the workflow.",
+                "optional_skills": [
+                    "example-skill-1",
+                    "example-skill-2",
+                    "example-skill-3"
+                ]
+            },
+            {
+                "name": "Merge",
+                "description": "This step merges the results of the previous steps.",
+                "optional_skills": [
+                    "example-skill-4",
+                    "example-skill-5"
+                ]
+
+            },
+            {
+                "name": "Step 2",
+                "description": "This is the second step of the workflow.",
+                "optional_skills": [
+                    "example-skill-6",
+                    "example-skill-7",
+                    "example-skill-14"
+                ]
+            },
+            {
+                "name": "Single Simulation",
+                "description": "This is the third step of the workflow.",
+                "optional_skills": [
+                    "example-skill-8",
+                    "example-skill-9"
+                ]
+            },
+            {
+                "name" : "Decompile Audit",
+                "description": "This is the fourth step of the workflow.",
+                "optional_skills": [
+                    "example-skill-10",
+                    "example-skill-11"
+                ]
+            },
+            {
+                "name": "System Simulation",
+                "description": "This is the fifth step of the workflow.",
+                "optional_skills": [
+                    "example-skill-12",
+                    "example-skill-13"
+                ]
+            }
+        ]
+    },
+    {
+        "name" : "Another Workflow",
+        "description": "This is another example workflow.",
+        "steps": [
+            {
+                "name": "Step A",
+                "description": "This is the first step of another workflow.",
+                "optional_skills": [
+                    "example-skill-15",
+                    "example-skill-16"
+                ]
+            },
+            {
+                "name": "Step B",
+                "description": "This is the second step of another workflow.",
+                "optional_skills": [
+                    "example-skill-17",
+                    "example-skill-18"
+                ]
+            }
+        ]
+    }
+]
